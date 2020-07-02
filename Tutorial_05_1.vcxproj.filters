@@ -39,12 +39,24 @@
     <ClCompile Include="osglibcpp.h">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\Tutorial_12\TransformAccumulator.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Tutorial_08\findNodeVisitor.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TravelManipulator.h">
       <Filter>lib\FlyCamera\header</Filter>
     </ClInclude>
     <ClInclude Include="followNodeMatrixManipulator.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Tutorial_12\TransformAccumulator.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Tutorial_08\findNodeVisitor.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
