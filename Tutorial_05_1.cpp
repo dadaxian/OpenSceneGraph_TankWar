@@ -12,7 +12,7 @@
 #include <osgSim/DOFTransform>
 #include <osgSim/MultiSwitch>
 
-#include "findNodeVisitor.h"
+
 #include <osgUtil/Optimizer>
 #include <osgText/Text>
 
@@ -25,9 +25,80 @@
 #include <iostream>  
 #include <osg/MatrixTransform>
 
-
+#include "findNodeVisitor.h"
 using namespace std;
+osgViewer::Viewer viewer;
+osg::Vec3 getNewPosi(osg::Vec3 pos,osg::Vec3 delta) {
+	//得到新的位置
+	osg::Vec3 newPos1 = pos + delta;
 
+	osgUtil::IntersectVisitor ivXY;
+	//根据新的位置得到两条线段检测
+	osg::ref_ptr<osg::LineSegment> lineXY = new osg::LineSegment(newPos1,
+		pos);
+
+	osg::ref_ptr<osg::LineSegment> lineZ = new osg::LineSegment(newPos1 + osg::Vec3(0.0f, 0.0f, 10.0f),
+		newPos1 - osg::Vec3(0.0f, 0.0f, -10.0f));
+
+	ivXY.addLineSegment(lineZ.get());
+
+	ivXY.addLineSegment(lineXY.get());
+	//结构交集检测
+	viewer.getSceneData()->accept(ivXY);
+	//如果没有碰撞检测
+	if (!ivXY.hits())
+	{
+		return newPos1;
+	}
+	return pos;
+}
+
+class LogHelp
+{
+public:
+	LogHelp();
+	LogHelp(int maxSize);
+	~LogHelp();
+	string log(string text);
+private:
+	vector<string> texts;
+	int MaxSize;
+};
+LogHelp::LogHelp()
+{
+	MaxSize = 5;
+	texts.push_back("welcome tank world!");
+}
+LogHelp::LogHelp(int maxSize)
+{
+	MaxSize = maxSize;
+	texts.push_back("welcome tank world!");
+}
+string LogHelp::log(string text) {
+	if ((int)texts.size() > this->MaxSize) {
+		texts.erase(texts.begin());
+	}
+	texts.push_back(text);
+
+	string textResult = "";
+	for (int i = 0; i < texts.size(); i++)
+	{
+		textResult += texts[i] + "\n";
+	}
+	return textResult;
+}
+LogHelp::~LogHelp()
+{
+}
+
+LogHelp* logHelp=new LogHelp();
+osgText::Text* text = new osgText::Text;
+osg::Node* tankNode;
+
+//void log(string msg) {
+//	//text->setText(logHelp->log(msg));
+//	text->setText(logHelp->log("gun turn left"));
+//}
 
 osg::Node* createHUD()
 {
@@ -38,15 +109,15 @@ osg::Node* createHUD()
 	//设置状态，关闭灯光
 	osg::StateSet* stateset = geode->getOrCreateStateSet();
 	stateset->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-	osg::Vec3 position(15.0f, 50.0f, 0.0f);
+	osg::Vec3 position(.0f, 1440.0f, 0.0f);
 	//设置字体属性
-	osgText::Text* text = new osgText::Text;
+	
 	geode->addDrawable(text);
 	//设置字体
 	text->setFont(songtiChanggui);
 	//设置位置
 	text->setPosition(position);
-	text->setText(L"顾正召 坦克大战");
+	text->setText(logHelp->log(""));
 
 	//设置相机
 	osg::Camera* camera = new osg::Camera;
@@ -63,6 +134,10 @@ osg::Node* createHUD()
 	camera->addChild(geode);
 	return camera;
 };
+
+
+
+
 
 bool addTextLabel(osg::Group* g, std::string s)
 {
@@ -265,12 +340,15 @@ osg::Matrixd followNodeMatrixManipulator::getMatrix() const
 
 
 
+
 class tankDataType : public osg::Referenced
 {
 public:
 	tankDataType(osg::Node*n);
-	void updateTurretRotation();
-	void updateGunElevation();
+	void updateTurretRotationLeft();
+	void updateTurretRotationRight();
+	void updateGunElevationUp();
+	void updateGunElevationDown();
 protected:
 	osgSim::DOFTransform* tankTurretNode;
 	osgSim::DOFTransform* tankGunNode;
@@ -278,20 +356,32 @@ protected:
 	double elevation;
 };
 
-void tankDataType::updateTurretRotation()
+void tankDataType::updateTurretRotationLeft()
 {
 	rotation += 0.01;
 	tankTurretNode->setCurrentHPR(osg::Vec3(rotation, 0, 0));
 }
 
-void tankDataType::updateGunElevation()
+void tankDataType::updateGunElevationUp()
 {
 	elevation += 0.01;
 	tankGunNode->setCurrentHPR(osg::Vec3(0, elevation, 0));
 	if (elevation > .5)
-		elevation = 0.0;
+		elevation = 0.5;
+}
+void tankDataType::updateTurretRotationRight()
+{
+	rotation -= 0.01;
+	tankTurretNode->setCurrentHPR(osg::Vec3(rotation, 0, 0));
 }
 
+void tankDataType::updateGunElevationDown()
+{
+	elevation -= 0.01;
+	tankGunNode->setCurrentHPR(osg::Vec3(0, elevation, 0));
+	if (elevation <0)
+		elevation = 0;
+}
 tankDataType::tankDataType(osg::Node* n)
 {
 	rotation = 0;
@@ -317,13 +407,12 @@ public:
 			dynamic_cast<tankDataType*> (node->getUserData());
 		if (tankData != NULL)
 		{
-			tankData->updateTurretRotation();
-			tankData->updateGunElevation();
+			tankData->updateTurretRotationLeft();
+			tankData->updateGunElevationUp();
 		}
 		traverse(node, nv);
 	}
 };
-
 
 
 
@@ -403,49 +492,101 @@ public:
 				//按下1为第一个不着火的飞机，2，着火飞机，3，牛
 				if (ea.getKey()== osgGA::GUIEventAdapter::KEY_Up)//(ea.getKey() == 0xFF52 || ea.getKey() == 0x57 || ea.getKey() == 0x77)
 				{
+					text->setText(logHelp->log("forward"));
 					if (tank != NULL)
 					{
 						//pat->setPosition(osg::Vec3(cosf(angle)*100.0f, sinf(angle)*100.0f, 20.0f));
 						//pat->setAttitude(osg::Quat(angle, osg::Vec3(0, 0, 1)));
 
-						tank->setPosition(tank->getPosition() + osg::Vec3(0, 1, 0));//左前上
+						tank->setPosition(getNewPosi( tank->getPosition() , osg::Vec3(0, 1, 0)));//左前上
 						//tank->setAttitude( osg::Quat(angle, osg::Vec3(0, 0, 0)));
 					}
 					traverse(obj, nv);
 				}
 				if (ea.getKey() == osgGA::GUIEventAdapter::KEY_Left) {
+					text->setText(logHelp->log("left"));
 					if (tank != NULL)
 					{
 						angle += osg::DegreesToRadians(0.1f);
 						//pat->setPosition(osg::Vec3(cosf(angle)*100.0f, sinf(angle)*100.0f, 20.0f));
 						//pat->setAttitude(osg::Quat(angle, osg::Vec3(0, 0, 1)));
 
-						tank->setPosition(tank->getPosition() + osg::Vec3(0, 1, 0));//左前上
+						tank->setPosition(getNewPosi(tank->getPosition(), getNewPosi(tank->getPosition(), osg::Vec3(0, 1, 0))));//左前上
 						tank->setAttitude(osg::Quat(angle, osg::Vec3(0, 0, 1)));
 					}
 					traverse(obj, nv);
 				}
 				if (ea.getKey() == osgGA::GUIEventAdapter::KEY_Right)
 				{
+					text->setText(logHelp->log("right"));
 					if (followerPAT != NULL)
 					{
 						yaw += osg::DegreesToRadians(0.1f);
-						followerPAT->setAttitude(osg::Quat(osg::DegreesToRadians(yaw), osg::Vec3(1, 0, 0)));
+						tank->setPosition(getNewPosi(tank->getPosition(), getNewPosi(tank->getPosition(), osg::Vec3(0, 1, 0))));//左前上
+						followerPAT->setAttitude(osg::Quat(osg::DegreesToRadians(yaw), getNewPosi(tank->getPosition(), osg::Vec3(1,0, 0))));
 					}
 					traverse(obj, nv);
 					
 				}
 				if (ea.getKey() == osgGA::GUIEventAdapter::KEY_Down)//(ea.getKey() == 0xFF52 || ea.getKey() == 0x57 || ea.getKey() == 0x77)
 				{
+					text->setText(logHelp->log("back"));
 					if (tank != NULL)
 					{
 						//pat->setPosition(osg::Vec3(cosf(angle)*100.0f, sinf(angle)*100.0f, 20.0f));
 						//pat->setAttitude(osg::Quat(angle, osg::Vec3(0, 0, 1)));
 
-						tank->setPosition(tank->getPosition() + osg::Vec3(0, -1, 0));//左前上
+						tank->setPosition(getNewPosi(tank->getPosition(), osg::Vec3(0, -1, 0)));//左前上
 						//tank->setAttitude( osg::Quat(angle, osg::Vec3(0, 0, 0)));
 					}
 					traverse(obj, nv);
+				}
+				if (ea.getKey() == osgGA::GUIEventAdapter::KEY_Insert)//(ea.getKey() == 0xFF52 || ea.getKey() == 0x57 || ea.getKey() == 0x77)
+				{
+					text->setText(logHelp->log("gun turn left"));
+					//text->setText("gun turn left");
+					osg::ref_ptr<tankDataType> tankData =
+						dynamic_cast<tankDataType*> (tankNode->getUserData());
+					if (tankData != NULL)
+					{
+						tankData->updateTurretRotationLeft();
+					}
+					traverse(tankNode, nv);
+				}
+				if (ea.getKey() == osgGA::GUIEventAdapter::KEY_Delete)//(ea.getKey() == 0xFF52 || ea.getKey() == 0x57 || ea.getKey() == 0x77)
+				{
+					text->setText(logHelp->log("gun turn right"));
+					//text->setText("gun turn right");
+					osg::ref_ptr<tankDataType> tankData =
+						dynamic_cast<tankDataType*> (tankNode->getUserData());
+					if (tankData != NULL)
+					{
+						tankData->updateTurretRotationRight();
+					}
+					traverse(tankNode, nv);
+				}
+				if (ea.getKey() == osgGA::GUIEventAdapter::KEY_Home)//(ea.getKey() == 0xFF52 || ea.getKey() == 0x57 || ea.getKey() == 0x77)
+				{
+					text->setText(logHelp->log("gun turn up"));
+					//text->setText("gun turn up");
+					osg::ref_ptr<tankDataType> tankData =
+						dynamic_cast<tankDataType*> (tankNode->getUserData());
+					if (tankData != NULL)
+					{
+						tankData->updateGunElevationUp();
+					}
+					traverse(tankNode, nv);
+				}
+				if (ea.getKey() == osgGA::GUIEventAdapter::KEY_End)//(ea.getKey() == 0xFF52 || ea.getKey() == 0x57 || ea.getKey() == 0x77)
+				{
+					text->setText(logHelp->log("gun turn down"));
+					osg::ref_ptr<tankDataType> tankData =
+						dynamic_cast<tankDataType*> (tankNode->getUserData());
+					if (tankData != NULL)
+					{
+						tankData->updateGunElevationDown();
+					}
+					traverse(tankNode, nv);
 				}
 				else if (ea.getKey() == '1')
 				{
@@ -588,7 +729,10 @@ void test() {
 //}
 
 int test1() {
-	osgViewer::Viewer viewer;
+	
+
+
+
 	osg::Group* rootNode = new osg::Group;
 	
 	//rootNode->addChild(createHUD());
@@ -601,11 +745,12 @@ int test1() {
 	}
 	rootNode->addChild(terrainNode);
 
-	osg::Node* tankNode = osgDB::readNodeFile("D:\\file\\图像技术实践\\图形\\图形大作业素材\\t80.flt");
+	//osg::Node* tankNode = osgDB::readNodeFile("D:\\file\\图像技术实践\\图形\\图形大作业素材\\t80.flt");
+	tankNode = osgDB::readNodeFile("../NPS_Data/Models/t72-tank/t72-tank_des.flt");
 
 	tankDataType* tankData = new tankDataType(tankNode);
 	tankNode->setUserData(tankData);
-	tankNode->setUpdateCallback(new tankNodeCallback);
+	//tankNode->setUpdateCallback(new tankNodeCallback);
 
 	if (!tankNode)
 	{

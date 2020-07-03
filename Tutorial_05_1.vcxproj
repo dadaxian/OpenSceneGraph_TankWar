@@ -154,18 +154,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\Tutorial_08\findNodeVisitor.cpp" />
     <ClCompile Include="..\Tutorial_12\TransformAccumulator.cpp" />
+    <ClCompile Include="findNodeVisitor.cpp" />
     <ClCompile Include="followNodeMatrixManipulator.cpp" />
     <ClCompile Include="osglibcpp.h" />
     <ClCompile Include="TravelManipulator.cpp" />
     <ClCompile Include="Tutorial_05_1.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\Tutorial_08\findNodeVisitor.h">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
-    </ClInclude>
     <ClInclude Include="..\Tutorial_12\TransformAccumulator.h" />
+    <ClInclude Include="findNodeVisitor.h" />
     <ClInclude Include="followNodeMatrixManipulator.h" />
     <ClInclude Include="TravelManipulator.h" />
   </ItemGroup>
