@@ -27,7 +27,72 @@
 
 #include "findNodeVisitor.h"
 using namespace std;
+
+// 三维角
+float xangle(0.0f);//左右
+float yAngle(0.0f);// 上下
+float zAngle(0.0f);//翻滚
+ 
 osgViewer::Viewer viewer;
+osg::PositionAttitudeTransform* tankTransForm;
+
+
+
+class LogHelp
+{
+public:
+	LogHelp();
+	LogHelp(int maxSize);
+	~LogHelp();
+	string log(string text);
+private:
+	vector<string> texts;
+	int MaxSize;
+};
+LogHelp::LogHelp()
+{
+	MaxSize = 5;
+	texts.push_back("welcome tank world!");
+}
+LogHelp::LogHelp(int maxSize)
+{
+	MaxSize = maxSize;
+	texts.push_back("welcome tank world!");
+}
+string LogHelp::log(string text) {
+	if ((int)texts.size() == this->MaxSize) {
+		for (int i = 0; i < texts.size() - 1; i++)
+		{
+			texts[i] = texts[i + 1];
+		}
+		texts.pop_back();
+	}
+	texts.push_back(text);
+
+	string textResult = "";
+	for (int i = 0; i < texts.size(); i++)
+	{
+		textResult += texts[i] + "\n";
+	}
+	return textResult;
+}
+LogHelp::~LogHelp()
+{
+}
+
+
+
+LogHelp* logHelp = new LogHelp();
+osgText::Text* text = new osgText::Text;
+
+osg::Node* tankNode;
+
+void logs(string tex) {
+	text->setText(logHelp->log(tex));
+}
+
+
+
 osg::Vec3 getNewPosi(osg::Vec3 pos,osg::Vec3 delta) {
 	//得到新的位置
 	osg::Vec3 newPos1 = pos + delta;
@@ -53,47 +118,50 @@ osg::Vec3 getNewPosi(osg::Vec3 pos,osg::Vec3 delta) {
 	return pos;
 }
 
-class LogHelp
-{
-public:
-	LogHelp();
-	LogHelp(int maxSize);
-	~LogHelp();
-	string log(string text);
-private:
-	vector<string> texts;
-	int MaxSize;
-};
-LogHelp::LogHelp()
-{
-	MaxSize = 5;
-	texts.push_back("welcome tank world!");
+osg::Vec3 getNewPosCat(float foot) {
+	float ypOffset = foot*cos(yAngle)*cos(xangle);//绝对坐标系下前后
+	float xpOffset = foot*cos(yAngle)*sin(xangle);//绝对坐标系下左右
+	float zpOffset = foot*sin(yAngle);//绝对坐标系下上下
+	logs(to_string(xpOffset) + " " + to_string(ypOffset) + " " + to_string(zpOffset));
+	return tankTransForm->getPosition() + osg::Vec3(xpOffset, ypOffset, zpOffset);
+	
 }
-LogHelp::LogHelp(int maxSize)
-{
-	MaxSize = maxSize;
-	texts.push_back("welcome tank world!");
-}
-string LogHelp::log(string text) {
-	if ((int)texts.size() > this->MaxSize) {
-		texts.erase(texts.begin());
-	}
-	texts.push_back(text);
 
-	string textResult = "";
-	for (int i = 0; i < texts.size(); i++)
+osg::Vec3 getAheadPosi(float of) {
+	osg::Vec3 pos = tankTransForm->getPosition();
+	osg::Vec3 delta = osg::Vec3(0, 1, 0);
+	//得到新的位置
+	//osg::Vec3 newPos1 = pos + delta;
+	osg::Vec3 newPos1 = getNewPosCat(of);
+	osgUtil::IntersectVisitor ivXY;
+	//根据新的位置得到两条线段检测
+	osg::ref_ptr<osg::LineSegment> lineXY = new osg::LineSegment(newPos1,
+		pos);
+
+	osg::ref_ptr<osg::LineSegment> lineZ = new osg::LineSegment(newPos1 + osg::Vec3(0.0f, 0.0f, 10.0f),
+		newPos1 - osg::Vec3(0.0f, 0.0f, -10.0f));
+
+	ivXY.addLineSegment(lineZ.get());
+
+	ivXY.addLineSegment(lineXY.get());
+	//结构交集检测
+	viewer.getSceneData()->accept(ivXY);
+	//如果没有碰撞检测
+	if (!ivXY.hits())
 	{
-		textResult += texts[i] + "\n";
+		return newPos1;
 	}
-	return textResult;
-}
-LogHelp::~LogHelp()
-{
+	else {
+		yAngle += 1.0f;
+		logs(to_string(yAngle));
+		//tankTransForm->setAttitude(osg::Quat(xangle, osg::Vec3(0, 0, 0)));
+		//traverse(obj, nv);
+	}
+	logs(to_string(yAngle));
+	return pos;
 }
 
-LogHelp* logHelp=new LogHelp();
-osgText::Text* text = new osgText::Text;
-osg::Node* tankNode;
+
 
 //void log(string msg) {
 //	//text->setText(logHelp->log(msg));
@@ -135,7 +203,16 @@ osg::Node* createHUD()
 	return camera;
 };
 
+void updateTank(int forw) {
 
+	switch (forw)
+	{
+	case 1:
+
+	default:
+		break;
+	}
+}
 
 
 
@@ -155,7 +232,7 @@ bool addTextLabel(osg::Group* g, std::string s)
 	textOne->setText(s);
 	textOne->setAxisAlignment(osgText::Text::XZ_PLANE);
 	textOne->setColor(osg::Vec4(.5, .5, .25, 1.0f));
-	textOne->setPosition(osg::Vec3(0, -5, 4));
+	textOne->setPosition(osg::Vec3(0, -5, 10));
 	//textOne->setDrawMode(osgText::Text::TEXT |
 	//                          osgText::Text::ALIGNMENT | 
 	//                             osgText::Text::BOUNDINGBOX);
@@ -403,13 +480,7 @@ class tankNodeCallback : public osg::NodeCallback
 public:
 	virtual void operator()(osg::Node* node, osg::NodeVisitor* nv)
 	{
-		osg::ref_ptr<tankDataType> tankData =
-			dynamic_cast<tankDataType*> (node->getUserData());
-		if (tankData != NULL)
-		{
-			tankData->updateTurretRotationLeft();
-			tankData->updateGunElevationUp();
-		}
+		tankTransForm->setPosition(getNewPosi(tankTransForm->getPosition() , osg::Vec3(0, 0, -0.1)));
 		traverse(node, nv);
 	}
 };
@@ -432,10 +503,10 @@ bool followNodeMatrixManipulator::handle(const osgGA::GUIEventAdapter&ea, osgGA:
 class KeyboardHandler :public osgGA::GUIEventHandler//人机交互事件处理器
 {
 private:
-	float angle;
+	
 	float yaw;
 public:
-	KeyboardHandler() : angle(0.0),yaw(-30.0) {}
+	KeyboardHandler() : yaw(-30.0) {}
 	//重构父类GUIEventHandler.handle，事件处理函数，自定义交互操作，
 	//参数1:当前传入此处理器的事件，只可以被获取，不能被修改
 	//参数2：反馈动作，动作适配器，可以获取也可以修改的参数，大部分时候这个传入值表示当前所用的视图对象View，可以用它来获取
@@ -469,15 +540,15 @@ public:
 				if (tank != NULL)
 				{
 					cout << "pat不为null" << endl;
-					angle += osg::DegreesToRadians(0.1f);
+					xangle += osg::DegreesToRadians(0.1f);
 					//pat->setPosition(osg::Vec3(cosf(angle)*100.0f, sinf(angle)*100.0f, 20.0f));
 					//pat->setAttitude(osg::Quat(angle, osg::Vec3(0, 0, 1)));
 
 					tank->setPosition(tank->getPosition() + osg::Vec3(0, 0.1, 0));//左前上
-					tank->setAttitude(osg::Quat(angle, osg::Vec3(0, 0, 0)));
+					tank->setAttitude(osg::Quat(xangle, osg::Vec3(0, 0, 0)));
 				}
 				cout << "pat为null" << endl;
-				cout << angle << endl;
+				cout << xangle << endl;
 				traverse(obj, nv);
 			}
 			else
@@ -490,7 +561,7 @@ public:
 					//cout << dynamic_cast <osg::Group*>(viewer->getSceneData())->getNumChildren() << endl;
 				
 				//按下1为第一个不着火的飞机，2，着火飞机，3，牛
-				if (ea.getKey()== osgGA::GUIEventAdapter::KEY_Up)//(ea.getKey() == 0xFF52 || ea.getKey() == 0x57 || ea.getKey() == 0x77)
+				if (ea.getKey()== osgGA::GUIEventAdapter::KEY_Up)// osgGA::GUIEventAdapter::KEY_Up)//(ea.getKey() == 0xFF52 || ea.getKey() == 0x57 || ea.getKey() == 0x77)
 				{
 					text->setText(logHelp->log("forward"));
 					if (tank != NULL)
@@ -498,7 +569,7 @@ public:
 						//pat->setPosition(osg::Vec3(cosf(angle)*100.0f, sinf(angle)*100.0f, 20.0f));
 						//pat->setAttitude(osg::Quat(angle, osg::Vec3(0, 0, 1)));
 
-						tank->setPosition(getNewPosi( tank->getPosition() , osg::Vec3(0, 1, 0)));//左前上
+						tank->setPosition(getAheadPosi(1));//getNewPosi( tank->getPosition() , osg::Vec3(0, 1, 0)));//左前上
 						//tank->setAttitude( osg::Quat(angle, osg::Vec3(0, 0, 0)));
 					}
 					traverse(obj, nv);
@@ -507,12 +578,12 @@ public:
 					text->setText(logHelp->log("left"));
 					if (tank != NULL)
 					{
-						angle += osg::DegreesToRadians(0.1f);
+						xangle += osg::DegreesToRadians(0.1f);
 						//pat->setPosition(osg::Vec3(cosf(angle)*100.0f, sinf(angle)*100.0f, 20.0f));
 						//pat->setAttitude(osg::Quat(angle, osg::Vec3(0, 0, 1)));
 
-						tank->setPosition(getNewPosi(tank->getPosition(), getNewPosi(tank->getPosition(), osg::Vec3(0, 1, 0))));//左前上
-						tank->setAttitude(osg::Quat(angle, osg::Vec3(0, 0, 1)));
+						tank->setPosition(getNewPosi(tank->getPosition(), getNewPosi(tank->getPosition(), osg::Vec3(-1,0 , 0))));//左前上
+						tank->setAttitude(osg::Quat(xangle, osg::Vec3(0, 0, 1)));
 					}
 					traverse(obj, nv);
 				}
@@ -521,9 +592,9 @@ public:
 					text->setText(logHelp->log("right"));
 					if (followerPAT != NULL)
 					{
-						yaw += osg::DegreesToRadians(0.1f);
-						tank->setPosition(getNewPosi(tank->getPosition(), getNewPosi(tank->getPosition(), osg::Vec3(0, 1, 0))));//左前上
-						followerPAT->setAttitude(osg::Quat(osg::DegreesToRadians(yaw), getNewPosi(tank->getPosition(), osg::Vec3(1,0, 0))));
+						xangle += osg::DegreesToRadians(0.1f);
+						tank->setPosition(getNewPosi(tank->getPosition(), getNewPosi(tank->getPosition(), osg::Vec3(1, 0, 0))));//左前上
+						followerPAT->setAttitude(osg::Quat(xangle, getNewPosi(tank->getPosition(), osg::Vec3(1,0, 0))));
 					}
 					traverse(obj, nv);
 					
@@ -536,7 +607,7 @@ public:
 						//pat->setPosition(osg::Vec3(cosf(angle)*100.0f, sinf(angle)*100.0f, 20.0f));
 						//pat->setAttitude(osg::Quat(angle, osg::Vec3(0, 0, 1)));
 
-						tank->setPosition(getNewPosi(tank->getPosition(), osg::Vec3(0, -1, 0)));//左前上
+						tank->setPosition(getAheadPosi(-1));//getNewPosi(tank->getPosition(), osg::Vec3(0, -1, 0)));//左前上
 						//tank->setAttitude( osg::Quat(angle, osg::Vec3(0, 0, 0)));
 					}
 					traverse(obj, nv);
@@ -731,7 +802,7 @@ void test() {
 int test1() {
 	
 
-
+	//init
 
 	osg::Group* rootNode = new osg::Group;
 	
@@ -745,12 +816,16 @@ int test1() {
 	}
 	rootNode->addChild(terrainNode);
 
-	//osg::Node* tankNode = osgDB::readNodeFile("D:\\file\\图像技术实践\\图形\\图形大作业素材\\t80.flt");
 	tankNode = osgDB::readNodeFile("../NPS_Data/Models/t72-tank/t72-tank_des.flt");
+	//tankNode = osgDB::readNodeFile("../NPS_Data/Models/t72-tank/t72-tank_des.flt");
+	//tankNode = osgDB::readNodeFile("D:\\file\\图像技术实践\\图形\\图形大作业素材\\tankbld.flt");
 
 	tankDataType* tankData = new tankDataType(tankNode);
 	tankNode->setUserData(tankData);
-	//tankNode->setUpdateCallback(new tankNodeCallback);
+	tankNode->setUpdateCallback(new tankNodeCallback);
+
+
+	
 
 	if (!tankNode)
 	{
@@ -759,6 +834,7 @@ int test1() {
 	}
 
 	viewer.setSceneData(rootNode);
+	
 	//viewer.setUpViewer(osgProducer::Viewer::STANDARD_SETTINGS);
 
 	// Create and set up a transform for updating the tank's
@@ -771,7 +847,7 @@ int test1() {
 	rootNode->addChild(tankPAT);
 	tankPAT->addChild(tankNode);
 	addTextLabel(tankPAT, "Follow Me!");
-
+	tankTransForm = dynamic_cast <osg::PositionAttitudeTransform*>(dynamic_cast <osg::Group*>(viewer.getSceneData())->getChild(1));
 	// Declare and set up a transform to 'follow' the tank node.
 	osg::PositionAttitudeTransform *followerPAT = new osg::PositionAttitudeTransform();
 	followerPAT->setPosition(osg::Vec3(0, -50, 12));
